@@ -25,6 +25,7 @@ my $seconds_in_a_year = ($seconds_in_a_day * 365);
 my $phone_address = "48:2C:A0:29:C8:71";
 my $phone_ip = "192.168.100.56";
 my $is_home = 0;
+my $ping = Net::Ping->new();
 my $is_home_human = "No";
 my $wimpy_power_ip = "192.168.100.5";
 my $ps5_power_ip = "192.168.100.6";
@@ -51,7 +52,8 @@ if (! -f "$rrd_file" )  {
   exit;
 }
 
-if ( pingecho($phone_ip) ) {
+if ( $ping->ping($phone_ip, 5) ) {
+	#( pingecho($phone_ip) ) {
   $is_home = 1;
   $is_home_human = "Yes";
 }
@@ -117,11 +119,6 @@ sub graph_it {
 	) or die "RRDs graph: " . RRDs::error();
 }
 
-sub isatty {
-  return -t STDIN || -t STDOUT || -t STDERR;
-}
-
-
 sub get_power_usage {
     my ($device_ip, $username, $password) = @_;
 
@@ -142,4 +139,8 @@ sub get_power_usage {
         print "Error: Unable to parse power usage from device at $device_ip.\n";
         return undef; # Return undefined if parsing fails
     }
+}
+
+sub isatty {
+  return -t STDIN || -t STDOUT || -t STDERR;
 }

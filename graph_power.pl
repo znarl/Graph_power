@@ -16,6 +16,7 @@ my $graph_file_daily = $output_path . $rrd . "_daily.png";
 my $graph_file_weekly = $output_path . $rrd . "_weekly.png";
 my $graph_file_monthly = $output_path . $rrd . "_monthly.png";
 my $graph_file_yearly = $output_path . $rrd . "_yearly.png";
+my $graph_file_alltime = $output_path . $rrd . "_alltime.png";
 
 my $seconds_in_a_day = (24 * 60 * 60);
 my $seconds_in_a_week = ($seconds_in_a_day * 7);
@@ -84,6 +85,7 @@ my @graphs = (
     { label => "Weekly",  file => $graph_file_weekly,  offset => $seconds_in_a_week },
     { label => "Monthly", file => $graph_file_monthly, offset => $seconds_in_a_month },
     { label => "Yearly",  file => $graph_file_yearly,  offset => $seconds_in_a_year },
+    { label => "All Time", file => $graph_file_alltime, offset => $seconds_in_a_year * 10 },
 );
 
 # Generate graphs

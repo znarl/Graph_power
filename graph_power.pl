@@ -22,19 +22,25 @@ my $seconds_in_a_week = ($seconds_in_a_day * 7);
 my $seconds_in_a_month = ($seconds_in_a_day * 31);
 my $seconds_in_a_year = ($seconds_in_a_day * 365);
 
-my $phone_address = "48:2C:A0:29:C8:71";
 my $phone_ip = "192.168.100.56";
+my $ping_retries = 3;
+my $ping_timeout = 2;
 my $is_home = 0;
 my $ping = Net::Ping->new();
 my $is_home_human = "No";
-my $wimpy_power_ip = "192.168.100.5";
-my $ps5_power_ip = "192.168.100.6";
-my $router_ip = "192.168.100.20";
-my $saltstone_ip = "192.168.100.4";
-my $kitchen_ip = "192.168.100.44";
 
+# Device configuration: name, IP, use_newer_protocol
+my @devices = (
+    { name => "Wimpy",                   ip => "192.168.100.95",  newer => 1 },
+    { name => "Entertainment System",    ip => "192.168.100.6",   newer => 1 },
+    { name => "Internet Router",         ip => "192.168.100.20",  newer => 1 },
+    { name => "Salt Stone",              ip => "192.168.100.4",   newer => 1 },
+    { name => "Kitchen",                 ip => "192.168.100.99",  newer => 1 },
+    { name => "Bedroom TV",              ip => "192.168.100.5",   newer => 1 },
+    { name => "Fridge",                  ip => "192.168.100.101", newer => 0 },
+);
 
-my ( $power_current1, $power_current2, $power_current3, $power_current4, $power_current5) = 0;
+my @power_current = ();
 
 # EPROC
 my $cur_time = time();
@@ -42,9 +48,9 @@ my $cur_time = time();
 my $now_string = localtime;
 
 # Do we have a TTY?
-my $tty;
-isatty();
-print "Detected TTY!\n" if ( $tty );
+my $tty=istty();
+print "Found a TTY, printing debug.\n" if $tty;
+
 
 ### If RRDtool DB not created, ask manually to create.
 if (! -f "$rrd_file" )  {
@@ -52,95 +58,92 @@ if (! -f "$rrd_file" )  {
   exit;
 }
 
-if ( $ping->ping($phone_ip, 5) ) {
-	#( pingecho($phone_ip) ) {
-  $is_home = 1;
-  $is_home_human = "Yes";
+
+for my $i (1 .. $ping_retries) {
+  if ( $ping->ping($phone_ip, $ping_timeout) ) {
+    $is_home = 1;
+    $is_home_human = "Yes";
+  }
 }
 print "Is Karl Home? $is_home_human ; and in binary now? $is_home\n" if ( $tty );
 
-$power_current1 = get_power_usage ($wimpy_power_ip, $TAPO_USERNAME, $TAPO_PASSWORD);
-$power_current2 = get_power_usage ($ps5_power_ip, $TAPO_USERNAME, $TAPO_PASSWORD);
-$power_current3 = get_power_usage ($router_ip, $TAPO_USERNAME, $TAPO_PASSWORD);
-$power_current4 = get_power_usage ($saltstone_ip, $TAPO_USERNAME, $TAPO_PASSWORD);
-$power_current5 = get_power_usage ($kitchen_ip, $TAPO_USERNAME, $TAPO_PASSWORD);
+# Retrieve power usage from all devices
+foreach my $device (@devices) {
+    my $power = get_power_usage($device->{ip}, $device->{newer});
+    push @power_current, $power;
+}
 
 
-RRDs::update("$rrd_file", "--template=power_current1:power_current2:power_current3:power_current4:power_current5:is_home", "N:$power_current1:$power_current2:$power_current3:$power_current4:$power_current5:$is_home");
+# Build RRD update string
+my $power_string = join ":", @power_current;
+RRDs::update("$rrd_file", "--template=power_current1:power_current2:power_current3:power_current4:power_current5:power_current6:power_current7:is_home", "N:$power_string:$is_home");
 
-# Daily
-my $start_place = $cur_time - $seconds_in_a_day;
-graph_it( $graph_file_daily, $start_place, $power_current1, $power_current2, $power_current3, $power_current4, $is_home);
-print "Daily graph $graph_file_daily, $start_place, $power_current1, $power_current2, $power_current3, $power_current4, $is_home\n" if ( $tty );
+# Graph configurations
+my @graphs = (
+    { label => "Daily",   file => $graph_file_daily,   offset => $seconds_in_a_day },
+    { label => "Weekly",  file => $graph_file_weekly,  offset => $seconds_in_a_week },
+    { label => "Monthly", file => $graph_file_monthly, offset => $seconds_in_a_month },
+    { label => "Yearly",  file => $graph_file_yearly,  offset => $seconds_in_a_year },
+);
 
-# Weekly
-$start_place = $cur_time - $seconds_in_a_week;
-graph_it( $graph_file_weekly, $start_place, , $power_current1, $power_current2, $power_current3, $power_current4, $is_home);
-print "Weekly graph $graph_file_daily, $start_place, $power_current1, $power_current2, $power_current3, $power_current4, $is_home\n" if ( $tty );
-
-# Monthly
-$start_place = $cur_time - $seconds_in_a_month;
-graph_it( $graph_file_monthly, $start_place, $power_current1, $power_current2, $power_current3, $power_current4, $is_home);
-print "Monthly graph $graph_file_daily, $start_place, $power_current1, $power_current2, $power_current3, $power_current4, $is_home\n" if ( $tty );
-
-# Yearly
-$start_place = $cur_time - $seconds_in_a_year;
-graph_it( $graph_file_yearly, $start_place, $power_current1, $power_current2, $power_current3, $power_current4, $is_home);
-print "Yearly graph $graph_file_daily, $start_place, $power_current1, $power_current2, $power_current3, $power_current4, $is_home\n" if ( $tty );
+# Generate graphs
+foreach my $graph (@graphs) {
+    my $start_place = $cur_time - $graph->{offset};
+    graph_it($graph->{file}, $start_place, \@power_current, $is_home, \@devices);
+    print "$graph->{label} graph $graph->{file}, $start_place\n" if ( $tty );
+}
 
 sub graph_it {
- 	my ( $file_name, $start_time, $power_current1, $power_current2, $power_current3, $power_current4, $is_home) = @_;
+ 	my ( $file_name, $start_time, $power_ref, $is_home, $devices_ref) = @_;
+ 	my @power_values = @$power_ref;
+ 	my @dev_list = @$devices_ref;
  	
 	RRDs::graph($file_name,
         "-w", "1800", "-h", "200",
         "--start", $start_time,
         "--end",   "now",
         "--watermark", $now_string,
-        "--title",  "Power Usages",
+        "--title",  "Power Usage",
 	"--color=BACK#CCCCCC",
 	"--color=SHADEB#9999CC",
-        "DEF:data1=$rrd_file:power_current1:AVERAGE",
-        "DEF:data2=$rrd_file:power_current2:AVERAGE",
-        "DEF:data3=$rrd_file:power_current3:AVERAGE",
-        "DEF:data4=$rrd_file:power_current4:AVERAGE",
-        "DEF:data4=$rrd_file:power_current5:AVERAGE",
-        "DEF:data5=$rrd_file:is_home:AVERAGE",
-        "CDEF:cps1=data1",
-        "CDEF:cps2=data2",
-        "CDEF:cps3=data3",
-        "CDEF:cps4=data4",
-        "CDEF:cps5=data5,50,*",
-        "TICK:cps5#ffffa0:1.0:  Home - $is_home_human",
-        "LINE2:cps1#41f456:Wimpy - $power_current1 Watts",
-        "LINE2:cps2#f44277:Entertainment System - $power_current2 Watts",
-        "LINE2:cps3#0000FF:Internet Router - $power_current3 Watts",
-        "LINE2:cps4#8e90bd:Salt Stone - $power_current4 Watts",
-        "LINE2:cps4#8e10bd:Kitchen - $power_current5 Watts",
+        (map { "DEF:data" . ($_ + 1) . "=$rrd_file:power_current" . ($_ + 1) . ":AVERAGE" } (0 .. $#dev_list)),
+        "DEF:data8=$rrd_file:is_home:AVERAGE",
+        (map { "CDEF:cps" . ($_ + 1) . "=data" . ($_ + 1) } (0 .. $#dev_list)),
+        "CDEF:cps8=data8",
+        "TICK:cps8#ffffa0:1.0:  Home - $is_home_human",
+        (map { my $i = $_; my $color_map = ["#41f456", "#f44277", "#0000FF", "#8e90bd", "#8e10bd", "#Ce505d", "#ADD8E6"]; "LINE2:cps" . ($i + 1) . $color_map->[$i] . ":" . $dev_list[$i]{name} . " - " . $power_values[$i] . " Watts" } (0 .. $#dev_list)),
 	) or die "RRDs graph: " . RRDs::error();
 }
 
 sub get_power_usage {
-    my ($device_ip, $username, $password) = @_;
+    my ($device_ip, $use_newer) = @_;
+    $use_newer //= 1;  # Default to newer protocol
 
-    # Run the kasa command to get power usage
-    my $command_output = `/usr/local/bin/kasa --host $device_ip --username $username --password $password`;
-
-    # Check if the command was successful
-    if ($? != 0) {
-        my $exit_code = $? >> 8;
-        print "Error: Unable to get power usage from device at $device_ip (Exit code: $exit_code).\n";
-        return undef; # Return undefined on failure
+    print "Getting power from device $device_ip... \t" if $tty;
+    
+    my $command_output;
+    if ($use_newer) {
+        $command_output = `/usr/local/bin/kasa --credentials-hash "QN2Ma+Jg7qEQGiZGHkmurg8ZcVG10ZiIuRUbRHvaRWE=" --encrypt-type "KLAP" --device-family "SMART.TAPOPLUG" --host $device_ip`;
+    } else {
+        # Older protocol for older devices
+        $command_output = `/usr/local/bin/kasa --credentials-hash "QN2Ma+Jg7qEQGiZGHkmurg8ZcVG10ZiIuRUbRHvaRWE=" --host $device_ip`;
     }
 
-    # Extract power usage from the command output
+    if ($? != 0) {
+        my $exit_code = $? >> 8;
+        print "Error: Unable to get power usage from device at $device_ip (Exit code: $exit_code).\n" if $tty;
+        return 0;
+    }
+
     if ($command_output =~ /(\d+\.?\d*)\s*W/) {
-        return $1; # Return the power usage in watts
+        print "$1 Watts\n" if $tty;
+        return $1;  # Return the power usage in watts
     } else {
-        print "Error: Unable to parse power usage from device at $device_ip.\n";
-        return undef; # Return undefined if parsing fails
+        print "Error: Unable to parse power usage from device at $device_ip.\n" if $tty;
+        return 0;  # Return 0 if parsing fails
     }
 }
 
-sub isatty {
+sub istty {
   return -t STDIN || -t STDOUT || -t STDERR;
 }

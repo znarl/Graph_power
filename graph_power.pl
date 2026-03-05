@@ -4,7 +4,7 @@ use strict;
 use lib "/usr/lib/perl/";
 use RRDs;
 use Math::Round;
-use Env qw($TAPO_USERNAME $TAPO_PASSWORD);
+use Env qw($TAPO_USERNAME $TAPO_PASSWORD $TAPO_CREDENTIALS_HASH);
 use Net::Ping;
 
 my $rrd_d = "/home/karl/bin";
@@ -128,10 +128,10 @@ sub get_power_usage {
     
     my $command_output;
     if ($use_newer) {
-        $command_output = `/usr/local/bin/kasa --credentials-hash "QN2Ma+Jg7qEQGiZGHkmurg8ZcVG10ZiIuRUbRHvaRWE=" --encrypt-type "KLAP" --device-family "SMART.TAPOPLUG" --host $device_ip`;
+        $command_output = `/usr/local/bin/kasa --credentials-hash "$TAPO_CREDENTIALS_HASH" --encrypt-type "KLAP" --device-family "SMART.TAPOPLUG" --host $device_ip`;
     } else {
         # Older protocol for older devices
-        $command_output = `/usr/local/bin/kasa --credentials-hash "QN2Ma+Jg7qEQGiZGHkmurg8ZcVG10ZiIuRUbRHvaRWE=" --host $device_ip`;
+        $command_output = `/usr/local/bin/kasa --credentials-hash "$TAPO_CREDENTIALS_HASH" --host $device_ip`;
     }
 
     if ($? != 0) {

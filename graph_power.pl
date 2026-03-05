@@ -16,7 +16,7 @@ my $graph_file_daily = $output_path . $rrd . "_daily.png";
 my $graph_file_weekly = $output_path . $rrd . "_weekly.png";
 my $graph_file_monthly = $output_path . $rrd . "_monthly.png";
 my $graph_file_yearly = $output_path . $rrd . "_yearly.png";
-my $graph_file_alltime = $output_path . $rrd . "_alltime.png";
+my $graph_file_alltime = $output_path . $rrd . "Long Wa";
 
 my $seconds_in_a_day = (24 * 60 * 60);
 my $seconds_in_a_week = ($seconds_in_a_day * 7);
@@ -38,7 +38,7 @@ my @devices = (
     { name => "Salt Stone",              ip => "192.168.100.4",   newer => 1 },
     { name => "Kitchen",                 ip => "192.168.100.99",  newer => 1 },
     { name => "Bedroom TV",              ip => "192.168.100.5",   newer => 1 },
-    { name => "Fridge",                  ip => "192.168.100.101", newer => 0 },
+    { name => "Fridge",                  ip => "192.168.100.123", newer => 1 },
 );
 
 my @power_current = ();
@@ -70,7 +70,7 @@ print "Is Karl Home? $is_home_human ; and in binary now? $is_home\n" if ( $tty )
 
 # Retrieve power usage from all devices
 foreach my $device (@devices) {
-    my $power = get_power_usage($device->{ip}, $device->{newer});
+    my $power = get_power_usage($device);
     push @power_current, $power;
 }
 
@@ -118,10 +118,13 @@ sub graph_it {
 }
 
 sub get_power_usage {
-    my ($device_ip, $use_newer) = @_;
+    my ($device) = @_;
+    my $device_ip = $device->{ip};
+    my $use_newer = $device->{newer};
+    my $device_name = $device->{name};
     $use_newer //= 1;  # Default to newer protocol
 
-    print "Getting power from device $device_ip... \t" if $tty;
+    print "Getting power from device $device_name ($device_ip)... \t" if $tty;
     
     my $command_output;
     if ($use_newer) {
@@ -133,7 +136,7 @@ sub get_power_usage {
 
     if ($? != 0) {
         my $exit_code = $? >> 8;
-        print "Error: Unable to get power usage from device at $device_ip (Exit code: $exit_code).\n" if $tty;
+        print "Error: Unable to get power usage from $device_name at $device_ip (Exit code: $exit_code).\n" if $tty;
         return 0;
     }
 
@@ -141,7 +144,7 @@ sub get_power_usage {
         print "$1 Watts\n" if $tty;
         return $1;  # Return the power usage in watts
     } else {
-        print "Error: Unable to parse power usage from device at $device_ip.\n" if $tty;
+        print "Error: Unable to parse power usage from $device_name at $device_ip.\n" if $tty;
         return 0;  # Return 0 if parsing fails
     }
 }

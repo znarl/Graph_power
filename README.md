@@ -17,16 +17,13 @@ Graph the power usage of different smart plugs using RRD and generate time-serie
   - `Math::Round` - Rounding utilities
   - `Net::Ping` - Network availability detection
 - `rrdtool` - Time-series database engine
-- `kasa` - TP-Link Tapo device CLI tool (installed at `/usr/local/bin/kasa`)
-
-## Setup
-
+09
 ### Database Initialization
 
 If the RRD database doesn't exist, the script will display the command to create it:
 
 ```bash
-rrdtool create graph_power.rrd --step 60 \
+r rdtool create graph_power.rrd --step 60 \
   DS:is_home:GAUGE:600:U:U \
   DS:power_current1:GAUGE:600:U:U \
   DS:power_current2:GAUGE:600:U:U \

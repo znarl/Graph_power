@@ -16,7 +16,7 @@ my $graph_file_daily = $output_path . $rrd . "_daily.png";
 my $graph_file_weekly = $output_path . $rrd . "_weekly.png";
 my $graph_file_monthly = $output_path . $rrd . "_monthly.png";
 my $graph_file_yearly = $output_path . $rrd . "_yearly.png";
-my $graph_file_alltime = $output_path . $rrd . "Long Wa";
+my $graph_file_alltime = $output_path . $rrd . "_alltime.png";
 
 my $seconds_in_a_day = (24 * 60 * 60);
 my $seconds_in_a_week = ($seconds_in_a_day * 7);
@@ -39,7 +39,10 @@ my @devices = (
     { name => "Kitchen",                 ip => "192.168.100.99",  newer => 1 },
     { name => "Bedroom TV",              ip => "192.168.100.5",   newer => 1 },
     { name => "Fridge",                  ip => "192.168.100.123", newer => 1 },
+    { name => "Whatevs",                 ip => "192.168.100.124", newer => 1 },
 );
+# total number of devices, used for dynamic RRD definitions
+my $device_count = scalar @devices;
 
 my @power_current = ();
 
@@ -53,10 +56,16 @@ my $tty=istty();
 print "Found a TTY, printing debug.\n" if $tty;
 
 
-### If RRDtool DB not created, ask manually to create.
+### If RRDtool DB not created, print instructions to create a suitable database.
 if (! -f "$rrd_file" )  {
-  print "rrdtool create $rrd_d/$rrd.rrd --step 60 DS:is_home:GAUGE:600:U:U DS:power_current1:GAUGE:600:U:U DS:power_current2:GAUGE:600:U:U DS:power_current3:GAUGE:600:U:U DS:power_current4:GAUGE:600:U:U DS:power_current5:GAUGE:600:U:U RRA:AVERAGE:0.5:1:10080 RRA:AVERAGE:0.5:6:8928 RRA:AVERAGE:0.5:60:43800\n";
-  exit;
+    # build DS entries for each device dynamically
+    my @ds_entries = ("DS:is_home:GAUGE:600:U:U");
+    for my $i (1 .. $device_count) {
+        push @ds_entries, "DS:power_current$i:GAUGE:600:U:U";
+    }
+    my $ds_str = join(" ", @ds_entries);
+    print "rrdtool create $rrd_d/$rrd.rrd --step 60 $ds_str RRA:AVERAGE:0.5:1:10080 RRA:AVERAGE:0.5:6:8928 RRA:AVERAGE:0.5:60:43800\n";
+    exit;
 }
 
 
@@ -77,7 +86,10 @@ foreach my $device (@devices) {
 
 # Build RRD update string
 my $power_string = join ":", @power_current;
-RRDs::update("$rrd_file", "--template=power_current1:power_current2:power_current3:power_current4:power_current5:power_current6:power_current7:is_home", "N:$power_string:$is_home");
+my @templates = (map { "power_current" . ($_ + 1) } 0 .. $#devices);
+push @templates, "is_home";
+my $template_str = join(":", @templates);
+RRDs::update("$rrd_file", "--template=$template_str", "N:$power_string:$is_home");
 
 # Graph configurations
 my @graphs = (
@@ -108,12 +120,18 @@ sub graph_it {
         "--title",  "Power Usage",
 	"--color=BACK#CCCCCC",
 	"--color=SHADEB#9999CC",
+        # device data DEFs
         (map { "DEF:data" . ($_ + 1) . "=$rrd_file:power_current" . ($_ + 1) . ":AVERAGE" } (0 .. $#dev_list)),
-        "DEF:data8=$rrd_file:is_home:AVERAGE",
+        # is_home def uses next index
+        "DEF:data" . ($#dev_list + 2) . "=$rrd_file:is_home:AVERAGE",
+        # create CDEFs for devices
         (map { "CDEF:cps" . ($_ + 1) . "=data" . ($_ + 1) } (0 .. $#dev_list)),
-        "CDEF:cps8=data8",
-        "TICK:cps8#ffffa0:1.0:  Home - $is_home_human",
-        (map { my $i = $_; my $color_map = ["#41f456", "#f44277", "#0000FF", "#8e90bd", "#8e10bd", "#Ce505d", "#ADD8E6"]; "LINE2:cps" . ($i + 1) . $color_map->[$i] . ":" . $dev_list[$i]{name} . " - " . $power_values[$i] . " Watts" } (0 .. $#dev_list)),
+        # is_home CDEF
+        "CDEF:cps" . ($#dev_list + 2) . "=data" . ($#dev_list + 2),
+        # tick line for home indicator
+        "TICK:cps" . ($#dev_list + 2) . "#ffffa0:1.0:  Home - $is_home_human",
+        # actual device lines (cycle through colors if needed)
+        (map { my $i = $_; my $color_map = ["#41f456", "#f44277", "#0000FF", "#8e90bd", "#8e10bd", "#Ce505d", "#ADD8E6", "#12D8E6"]; my $color = $color_map->[$i % @$color_map]; "LINE2:cps" . ($i + 1) . $color . ":" . $dev_list[$i]{name} . " - " . $power_values[$i] . " Watts" } (0 .. $#dev_list)),
 	) or die "RRDs graph: " . RRDs::error();
 }
 
